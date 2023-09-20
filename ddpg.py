@@ -56,7 +56,7 @@ class OU_Noise:
     
 class DDPG:
 
-    def __init__(self, state_size, action_size, buffer_size, batch_size, start_size, lr_a, lr_c, tau, gamma):
+    def __init__(self, state_size, action_size, buffer_size, batch_size, start_size, lr_a, lr_c, gamma):
         self.actor = Actor(state_size, action_size).to(device)
         self.target_actor = Actor(state_size, action_size).to(device)
         self.critic = Critic(state_size, action_size).to(device)
@@ -67,7 +67,6 @@ class DDPG:
         self.opt_critic = optim.Adam(self.critic.parameters(), lr = lr_c)
 
         self.gamma = gamma
-        self.tau = tau
         self.start_size = start_size
 
         self.update_networks(tau = 1)
@@ -113,5 +112,3 @@ class DDPG:
             self.opt_actor.zero_grad()
             actor_loss.backward()
             self.opt_actor.step()
-
-            self.update_networks(tau = self.tau)
