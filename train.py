@@ -66,7 +66,7 @@ if __name__ == '__main__':
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.shape[0]
 
-    ddpg_m = DDPG(state_size, action_size, buffer_size, batch_size, start_size, lr_a, lr_c, tau, gamma)
+    ddpg_m = DDPG(state_size, action_size, buffer_size, batch_size, start_size, lr_a, lr_c, gamma)
 
     rewards = []
     episodes = []
@@ -83,9 +83,10 @@ if __name__ == '__main__':
 
             next_state, reward, terminated, truncated, _ = env.step(action)
             ddpg_m.add_data(state, action, reward, next_state, terminated, truncated)
+            ddpg_m.learn()
 
             if step % update_step == 0:
-                ddpg_m.learn()
+                ddpg_m.update_networks(tau = tau)
 
             r += reward
 
