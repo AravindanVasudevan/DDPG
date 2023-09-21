@@ -1,3 +1,4 @@
+import copy
 import random
 import torch
 import numpy as np
@@ -39,14 +40,13 @@ class OU_Noise:
 
     def __init__(self, action_size, mu = 0, theta = 0.15, sigma = 0.1):
         self.action_size = action_size
-        self.mu = mu
+        self.mu = mu * np.ones(action_size)
         self.theta = theta
         self.sigma = sigma
-        self.state = np.ones(self.action_size) * self.mu
         self.reset()
 
     def reset(self):
-        self.state = np.ones(self.action_size) * self.mu
+        self.state = copy.copy(self.mu)
 
     def sample(self):
         x = self.state
@@ -56,7 +56,7 @@ class OU_Noise:
     
 class DDPG:
 
-    def __init__(self, state_size, action_size, buffer_size, batch_size, start_size, lr_a, lr_c, gamma):
+    def __init__(self, state_size, action_size, buffer_size, batch_size, lr_a, lr_c, tau, gamma):
         self.actor = Actor(state_size, action_size).to(device)
         self.target_actor = Actor(state_size, action_size).to(device)
         self.critic = Critic(state_size, action_size).to(device)
@@ -67,19 +67,28 @@ class DDPG:
         self.opt_critic = optim.Adam(self.critic.parameters(), lr = lr_c)
 
         self.gamma = gamma
-        self.start_size = start_size
+        self.tau = tau
+        self.batch_size = batch_size
 
-        self.update_networks(tau = 1)
+        # self.update_networks(tau = 1)
     
     def act(self, state, noise):
+        # if noise == None:
+        #     action = self.actor(state)
+        #     action = action.squeeze().detach().cpu().numpy()
+        # else:    
+        #     action = self.actor(state)
+        #     action = action.squeeze().detach().cpu().numpy()
+        #     action = np.clip(action + noise, -1, 1)
         action = self.actor(state)
         action = action.squeeze().detach().cpu().numpy()
-        return np.clip(action + noise, -1, 1)
+        action = np.clip(action + noise, -1, 1)
+        return action
     
     def add_data(self, state, action, reward, next_state, terminated, truncated):
         self.memory.add(state, action, reward, next_state, terminated, truncated)
     
-    def update_networks(self, tau = 1):
+    def update_networks(self, tau):
         for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
             target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
@@ -87,7 +96,7 @@ class DDPG:
             target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
     
     def learn(self):
-        if len(self.memory) > self.start_size:
+        if len(self.memory) > self.batch_size:
             states, actions, rewards, next_states, terminates, truncates = self.memory.sample()
 
             states = states.cpu().numpy()
@@ -112,3 +121,6 @@ class DDPG:
             self.opt_actor.zero_grad()
             actor_loss.backward()
             self.opt_actor.step()
+
+            self.update_networks(tau = self.tau)
+            # print(f'Actor Loss: {actor_loss} | Critic Loss: {critic_loss}')

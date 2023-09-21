@@ -11,6 +11,10 @@ class Actor(nn.Module):
         self.fc2 = nn.Linear(400, 300)
         self.fc3 = nn.Linear(300, action_size)
 
+        nn.init.normal_(self.fc1.weight, mean = 0, std = 0.5)
+        nn.init.normal_(self.fc2.weight, mean = 0, std = 0.5)
+        nn.init.normal_(self.fc3.weight, mean = 0, std = 0.5)
+
         # self.mean_fc = nn.Linear(300, action_size)
         # self.std_fc = nn.Linear(300, action_size)
 
@@ -32,6 +36,10 @@ class Critic(nn.Module):
       self.fc1 = nn.Linear(state_size, 400)
       self.fc2 = nn.Linear(400 + action_size, 300)
       self.fc3 = nn.Linear(300, 1)
+
+      nn.init.normal_(self.fc1.weight, mean = 0, std = 0.5)
+      nn.init.normal_(self.fc2.weight, mean = 0, std = 0.5)
+      nn.init.normal_(self.fc3.weight, mean = 0, std = 0.5)
     #   self.fc1 = nn.Linear(state_size + action_size, 128)
     #   self.fc2 = nn.Linear(128, 128)
     #   self.fc3 = nn.Linear(128, 32)
