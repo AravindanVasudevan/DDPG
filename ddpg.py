@@ -2,6 +2,7 @@ import copy
 import random
 import torch
 import numpy as np
+import torch.nn.functional as F
 import torch.optim as optim
 from collections import namedtuple, deque
 from model import (
@@ -40,7 +41,7 @@ class OU_Noise:
 
     def __init__(self, action_size, mu = 0, theta = 0.15, sigma = 0.1):
         self.action_size = action_size
-        self.mu = mu * np.ones(action_size)
+        self.mu = mu * np.ones_like(action_size)
         self.theta = theta
         self.sigma = sigma
         self.reset()
@@ -69,58 +70,59 @@ class DDPG:
         self.gamma = gamma
         self.tau = tau
         self.batch_size = batch_size
-
-        # self.update_networks(tau = 1)
     
     def act(self, state, noise):
-        # if noise == None:
-        #     action = self.actor(state)
-        #     action = action.squeeze().detach().cpu().numpy()
-        # else:    
-        #     action = self.actor(state)
-        #     action = action.squeeze().detach().cpu().numpy()
-        #     action = np.clip(action + noise, -1, 1)
+        self.actor.eval()
         action = self.actor(state)
         action = action.squeeze().detach().cpu().numpy()
         action = np.clip(action + noise, -1, 1)
+        self.actor.train()
         return action
     
     def add_data(self, state, action, reward, next_state, terminated, truncated):
         self.memory.add(state, action, reward, next_state, terminated, truncated)
     
     def update_networks(self, tau):
-        for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
-            target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
+        for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
+                target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
-        for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
+        for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
             target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
     
     def learn(self):
         if len(self.memory) > self.batch_size:
+            self.actor.eval()
+            self.critic.eval()
+            self.target_actor.eval()
+            self.target_critic.eval()
+
             states, actions, rewards, next_states, terminates, truncates = self.memory.sample()
 
             states = states.cpu().numpy()
             next_states = next_states.cpu().numpy()
             actions = actions.cpu().numpy()
 
-            with torch.no_grad():
-                next_actions = self.target_actor(next_states)
-                next_actions = next_actions.squeeze().detach().cpu().numpy()
-                next_values = self.target_critic(next_states, next_actions)
-                target_q_values = rewards + self.gamma * (1 - torch.logical_or(terminates, truncates).float()) * next_values
+            next_actions = self.target_actor(next_states)
+            next_actions = next_actions.squeeze().detach().cpu().numpy()
+            next_values = self.target_critic(next_states, next_actions)
+            target_q_values = rewards + self.gamma * (1 - torch.logical_or(terminates, truncates).float()) * next_values
 
             current_q_values = self.critic(states, actions)
     
-            critic_loss = (current_q_values - target_q_values).pow(2).mean()
-            # critic_loss = F.smooth_l1_loss(current_q_values, target_q_values)
             self.opt_critic.zero_grad()
+            self.critic.train()
+            # critic_loss = (current_q_values - target_q_values).pow(2).mean()
+            critic_loss = F.mse_loss(current_q_values, target_q_values)
             critic_loss.backward()
             self.opt_critic.step()
+            self.critic.eval()
 
-            actor_loss = -self.critic(states, self.actor(states).squeeze().detach().cpu().numpy()).mean()
             self.opt_actor.zero_grad()
+            self.actor.train()
+            actor_loss = -self.critic(states, self.actor(states).squeeze().detach().cpu().numpy()).mean()
             actor_loss.backward()
             self.opt_actor.step()
+            self.actor.eval()
 
             self.update_networks(tau = self.tau)
             # print(f'Actor Loss: {actor_loss} | Critic Loss: {critic_loss}')

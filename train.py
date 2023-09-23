@@ -37,11 +37,7 @@ def render(actor, max_t_sim, s_environment, episode):
         for _ in range(max_t_sim):
             action = actor(state)
             action = action.squeeze().detach().cpu().numpy()
-
-            # exploration_noise = ou_noise.sample()
-            # action = action + exploration_noise
-            # action = np.clip(action, -1, 1)
-
+            
             next_state, reward, terminated, truncated, _ = s_environment.step(action)  
             sim_reward += reward
             frame = s_environment.render()
@@ -70,19 +66,12 @@ if __name__ == '__main__':
     rewards = []
     episodes = []
     best_reward = 0
-    sample_steps = 500
 
     for e in range(1, n_training_episodes + 1):
         ou_noise.reset()
         state, _ = env.reset()
         r = 0
         for step in range(max_t):
-            # if step < int(sample_steps):
-            #     action = env.action_space.sample()
-            # else:
-            #     # exploration_noise = ou_noise.sample()
-            #     action = ddpg_m.act(state, None)
-            
             exploration_noise = ou_noise.sample()
             action = ddpg_m.act(state, exploration_noise)
             next_state, reward, terminated, truncated, _ = env.step(action)
@@ -108,10 +97,6 @@ if __name__ == '__main__':
         
         rewards.append(r)
         episodes.append(e)
-
-        # if e % 50 == 0:
-        #     sample_steps /= 2
-        sample_steps *= 0.9
 
     torch.save({'model_state_dict': ddpg_m.actor.state_dict()}, f'checkpoints/{agent_name}_actor_checkpoint.pth')
     torch.save({'model_state_dict': ddpg_m.critic.state_dict()}, f'checkpoints/{agent_name}_critic_checkpoint.pth')
