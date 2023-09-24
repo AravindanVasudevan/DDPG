@@ -31,25 +31,22 @@ from hyperparameter import(
 def render(actor, max_t_sim, s_environment, episode):
     actor.eval()
     frames = []
-    sim_reward = 0
     state, _ = s_environment.reset()
     with torch.no_grad():
         for _ in range(max_t_sim):
             action = actor(state)
             action = action.squeeze().detach().cpu().numpy()
             
-            next_state, reward, terminated, truncated, _ = s_environment.step(action)  
-            sim_reward += reward
+            next_state, _, terminated, truncated, _ = s_environment.step(action)  
             frame = s_environment.render()
             frames.append(frame)
             imageio.mimsave(f'simulations/simulation_episode_{episode}.gif', frames)
+            state = next_state
 
             if terminated or truncated:
                 break
 
-            state = next_state
-
-    print(f'simulation for training episode {episode} is saved and the reward obtained is {sim_reward}')
+    print(f'simulation for training episode {episode}')
     actor.train()
 
 if __name__ == '__main__':
