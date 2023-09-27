@@ -39,7 +39,7 @@ class ReplayBuffer:
     
 class OU_Noise:
 
-    def __init__(self, action_size, mu = 0, theta = 0.15, sigma = 0.1):
+    def __init__(self, action_size, mu = 0, theta = 0.15, sigma = 0.2):
         self.action_size = action_size
         self.mu = mu * np.ones_like(action_size)
         self.theta = theta
@@ -54,6 +54,9 @@ class OU_Noise:
         dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(self.action_size)
         self.state = x + dx
         return self.state
+    
+    def sample_zero(self):
+        return np.zeros_like(self.mu)
     
 class DDPG:
 
@@ -70,7 +73,7 @@ class DDPG:
         self.gamma = gamma
         self.tau = tau
         self.batch_size = batch_size
-    
+
     def act(self, state, noise):
         self.actor.eval()
         action = self.actor(state)
@@ -112,14 +115,15 @@ class DDPG:
             self.opt_critic.zero_grad()
             self.critic.train()
             # critic_loss = (current_q_values - target_q_values).pow(2).mean()
-            critic_loss = F.mse_loss(current_q_values, target_q_values)
+            # critic_loss = F.mse_loss(current_q_values, target_q_values)
+            critic_loss = F.smooth_l1_loss(current_q_values, target_q_values)
             critic_loss.backward()
             self.opt_critic.step()
             self.critic.eval()
 
             self.opt_actor.zero_grad()
             self.actor.train()
-            actor_loss = -self.critic(states, self.actor(states).squeeze().detach().cpu().numpy()).mean()
+            actor_loss = -1 * self.critic(states, self.actor(states).squeeze().detach().cpu().numpy()).mean()
             actor_loss.backward()
             self.opt_actor.step()
             self.actor.eval()

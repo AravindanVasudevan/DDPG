@@ -12,8 +12,8 @@ from ddpg import(
     DDPG
 )
 from hyperparameter import(
-    print_step,
-    render_step,
+    print_episode,
+    render_episode,
     n_training_episodes,
     buffer_size,
     batch_size,
@@ -41,12 +41,13 @@ def render(actor, max_t_sim, s_environment, episode):
             frame = s_environment.render()
             frames.append(frame)
             imageio.mimsave(f'simulations/simulation_episode_{episode}.gif', frames)
-            state = next_state
 
             if terminated or truncated:
                 break
+            
+            state = next_state
 
-    print(f'simulation for training episode {episode}')
+    print(f'simulation for training episode {episode} saved')
     actor.train()
 
 if __name__ == '__main__':
@@ -59,16 +60,16 @@ if __name__ == '__main__':
     ou_noise = OU_Noise(action_size = action_size)
 
     ddpg_m = DDPG(state_size, action_size, buffer_size, batch_size, lr_a, lr_c, tau, gamma)
-
+    
     rewards = []
+    avg_rewards = []
     episodes = []
     best_reward = 0
-
     for e in range(1, n_training_episodes + 1):
         ou_noise.reset()
         state, _ = env.reset()
         r = 0
-        for step in range(max_t):
+        for _ in range(max_t):
             exploration_noise = ou_noise.sample()
             action = ddpg_m.act(state, exploration_noise)
             next_state, reward, terminated, truncated, _ = env.step(action)
@@ -79,11 +80,13 @@ if __name__ == '__main__':
 
             if terminated or truncated:
                 break
+            
+            state = next_state
         
-        if e % print_step == 0:
+        if e % print_episode == 0:
             print(f'Episode {e} Reward: {r}')
         
-        if e % render_step == 0:
+        if e % render_episode == 0:
             render(ddpg_m.actor, max_t_sim, s_env, e)
 
         if r > best_reward or e == 1:
@@ -91,7 +94,7 @@ if __name__ == '__main__':
             torch.save({'model_state_dict': ddpg_m.actor.state_dict()}, f'checkpoints/{agent_name}_best_actor_checkpoint.pth')
             torch.save({'model_state_dict': ddpg_m.critic.state_dict()}, f'checkpoints/{agent_name}_best_critic_checkpoint.pth')
             print(f'Saving the best model checkpoint with the reward {r} obtained at episode {e}')
-        
+
         rewards.append(r)
         episodes.append(e)
 
