@@ -62,7 +62,6 @@ if __name__ == '__main__':
     ddpg_m = DDPG(state_size, action_size, buffer_size, batch_size, lr_a, lr_c, tau, gamma)
     
     rewards = []
-    avg_rewards = []
     episodes = []
     best_reward = 0
     for e in range(1, n_training_episodes + 1):
@@ -82,7 +81,7 @@ if __name__ == '__main__':
                 break
             
             state = next_state
-        
+
         if e % print_episode == 0:
             print(f'Episode {e} Reward: {r}')
         

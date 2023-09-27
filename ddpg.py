@@ -100,7 +100,6 @@ class DDPG:
             self.target_critic.eval()
 
             states, actions, rewards, next_states, terminates, truncates = self.memory.sample()
-
             states = states.cpu().numpy()
             next_states = next_states.cpu().numpy()
             actions = actions.cpu().numpy()
