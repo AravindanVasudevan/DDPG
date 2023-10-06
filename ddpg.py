@@ -94,11 +94,6 @@ class DDPG:
     
     def learn(self):
         if len(self.memory) > self.batch_size:
-            self.actor.eval()
-            self.critic.eval()
-            self.target_actor.eval()
-            self.target_critic.eval()
-
             states, actions, rewards, next_states, terminates, truncates = self.memory.sample()
             states = states.cpu().numpy()
             next_states = next_states.cpu().numpy()
@@ -112,13 +107,11 @@ class DDPG:
             current_q_values = self.critic(states, actions)
     
             self.opt_critic.zero_grad()
-            self.critic.train()
             # critic_loss = (current_q_values - target_q_values).pow(2).mean()
-            # critic_loss = F.mse_loss(current_q_values, target_q_values)
-            critic_loss = F.smooth_l1_loss(current_q_values, target_q_values)
+            critic_loss = F.mse_loss(current_q_values, target_q_values)
+            # critic_loss = F.smooth_l1_loss(current_q_values, target_q_values)
             critic_loss.backward()
             self.opt_critic.step()
-            self.critic.eval()
 
             self.opt_actor.zero_grad()
             self.actor.train()
@@ -126,6 +119,6 @@ class DDPG:
             actor_loss.backward()
             self.opt_actor.step()
             self.actor.eval()
+            self.critic.eval()
 
             self.update_networks(tau = self.tau)
-            # print(f'Actor Loss: {actor_loss} | Critic Loss: {critic_loss}')

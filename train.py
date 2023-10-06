@@ -28,31 +28,31 @@ from hyperparameter import(
 )
 
 
-def render(actor, max_t_sim, s_environment, episode):
-    actor.eval()
-    frames = []
-    state, _ = s_environment.reset()
-    with torch.no_grad():
-        for _ in range(max_t_sim):
-            action = actor(state)
-            action = action.squeeze().detach().cpu().numpy()
+# def render(actor, max_t_sim, s_environment, episode):
+#     actor.eval()
+#     frames = []
+#     state, _ = s_environment.reset()
+#     with torch.no_grad():
+#         for _ in range(max_t_sim):
+#             action = actor(state)
+#             action = action.squeeze().detach().cpu().numpy()
             
-            next_state, _, terminated, truncated, _ = s_environment.step(action)  
-            frame = s_environment.render()
-            frames.append(frame)
-            imageio.mimsave(f'simulations/simulation_episode_{episode}.gif', frames)
+#             next_state, _, terminated, truncated, _ = s_environment.step(action)  
+#             frame = s_environment.render()
+#             frames.append(frame)
+#             imageio.mimsave(f'simulations/simulation_episode_{episode}.gif', frames)
 
-            if terminated or truncated:
-                break
+#             if terminated or truncated:
+#                 break
             
-            state = next_state
+#             state = next_state
 
-    print(f'simulation for training episode {episode} saved')
-    actor.train()
+#     print(f'simulation for training episode {episode} saved')
+#     actor.train()
 
 if __name__ == '__main__':
     env = gym.make(env_id)
-    s_env = gym.make(env_id, render_mode = 'rgb_array')
+    # s_env = gym.make(env_id, render_mode = 'rgb_array')
     
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.shape[0]
@@ -85,8 +85,8 @@ if __name__ == '__main__':
         if e % print_episode == 0:
             print(f'Episode {e} Reward: {r}')
         
-        if e % render_episode == 0:
-            render(ddpg_m.actor, max_t_sim, s_env, e)
+        # if e % render_episode == 0:
+        #     render(ddpg_m.actor, max_t_sim, s_env, e)
 
         if r > best_reward or e == 1:
             best_reward = r
