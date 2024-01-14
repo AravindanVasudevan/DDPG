@@ -1,6 +1,7 @@
 import copy
 import random
 import torch
+import imageio
 import numpy as np
 import torch.nn.functional as F
 import torch.optim as optim
@@ -9,7 +10,10 @@ from model import (
     Actor,
     Critic
 )
-from hyperparameter import device
+from hyperparameter import (
+    device, 
+    agent_name
+)
 
 class ReplayBuffer:
 
@@ -35,13 +39,14 @@ class ReplayBuffer:
         return states, actions, rewards, next_states, terminates, truncates
 
     def __len__(self):
+
         return len(self.memory)
     
 class OU_Noise:
 
-    def __init__(self, action_size, mu = 0, theta = 0.15, sigma = 0.2):
-        self.action_size = action_size
-        self.mu = mu * np.ones_like(action_size)
+    def __init__(self, input_size, mu = 0, theta = 0.1, sigma = 0.1):
+        self.input_size = input_size
+        self.mu = mu * np.ones_like(input_size)
         self.theta = theta
         self.sigma = sigma
         self.reset()
@@ -51,16 +56,19 @@ class OU_Noise:
 
     def sample(self):
         x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(self.action_size)
+        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(self.input_size)
         self.state = x + dx
+
         return self.state
     
     def sample_zero(self):
+
         return np.zeros_like(self.mu)
     
 class DDPG:
 
     def __init__(self, state_size, action_size, buffer_size, batch_size, lr_a, lr_c, tau, gamma):
+        self.ou_noise = OU_Noise(input_size = action_size)
         self.actor = Actor(state_size, action_size).to(device)
         self.target_actor = Actor(state_size, action_size).to(device)
         self.critic = Critic(state_size, action_size).to(device)
@@ -75,11 +83,11 @@ class DDPG:
         self.batch_size = batch_size
 
     def act(self, state, noise):
-        self.actor.eval()
-        action = self.actor(state)
-        action = action.squeeze().detach().cpu().numpy()
-        action = np.clip(action + noise, -1, 1)
-        self.actor.train()
+        with torch.no_grad():
+            action = self.actor(state)
+            action = action.squeeze().detach().cpu().numpy()
+            action = np.clip(action + noise, -1, 1)
+
         return action
     
     def add_data(self, state, action, reward, next_state, terminated, truncated):
@@ -88,6 +96,7 @@ class DDPG:
     def update_networks(self, tau):
         for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
                 target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
+
 
         for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
             target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
@@ -99,26 +108,56 @@ class DDPG:
             next_states = next_states.cpu().numpy()
             actions = actions.cpu().numpy()
 
-            next_actions = self.target_actor(next_states)
-            next_actions = next_actions.squeeze().detach().cpu().numpy()
-            next_values = self.target_critic(next_states, next_actions)
-            target_q_values = rewards + self.gamma * (1 - torch.logical_or(terminates, truncates).float()) * next_values
+            with torch.no_grad():
+                next_actions = self.target_actor(next_states)
+                next_actions = next_actions.squeeze().detach().cpu().numpy()
+                next_values = self.target_critic(next_states, next_actions)
 
+            target_q_values = rewards + self.gamma * (1 - torch.logical_or(terminates, truncates).float()) * next_values
             current_q_values = self.critic(states, actions)
-    
-            self.opt_critic.zero_grad()
+            
             # critic_loss = (current_q_values - target_q_values).pow(2).mean()
             critic_loss = F.mse_loss(current_q_values, target_q_values)
             # critic_loss = F.smooth_l1_loss(current_q_values, target_q_values)
+            actor_loss = -1 * self.critic(states, self.actor(states).squeeze().detach().cpu().numpy()).squeeze().mean()
+            
+            self.opt_actor.zero_grad()
+            actor_loss.backward()
+            self.opt_actor.step()
+
+            self.opt_critic.zero_grad()
             critic_loss.backward()
             self.opt_critic.step()
 
-            self.opt_actor.zero_grad()
-            self.actor.train()
-            actor_loss = -1 * self.critic(states, self.actor(states).squeeze().detach().cpu().numpy()).mean()
-            actor_loss.backward()
-            self.opt_actor.step()
-            self.actor.eval()
-            self.critic.eval()
-
             self.update_networks(tau = self.tau)
+        
+    def render(self, eps, eval_env):
+        frames = []
+        total_reward = 0
+        state_dict, _ = eval_env.reset()
+        state = np.concatenate((state_dict['observation'], state_dict['achieved_goal'], state_dict['desired_goal']))
+        self.ou_noise.reset()
+        step = 0
+        with torch.no_grad():
+            while True:
+                zero_noise = self.ou_noise.sample_zero()
+                action = self.act(state, zero_noise)
+                next_state_dict, reward, terminated, truncated, _ = eval_env.step(action)
+                next_state = np.concatenate((next_state_dict['observation'], next_state_dict['achieved_goal'], next_state_dict['desired_goal']))
+                total_reward += reward
+                step += 1
+                
+                frame = eval_env.render()
+                frames.append(frame)
+
+                done = terminated or truncated
+
+                if total_reward <= -250:
+                    done = True
+
+                if done:
+                    break
+
+                state = next_state
+            
+        imageio.mimsave(f'simulations/{agent_name}_{eps}.gif', frames)
