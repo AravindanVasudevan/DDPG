@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from hyperparameter import device
 
 class Actor(nn.Module):
 
@@ -12,8 +11,6 @@ class Actor(nn.Module):
         self.fc3 = nn.Linear(h_dim2, action_size)
 
     def forward(self, state):
-        state = torch.from_numpy(state).float().unsqueeze(0).to(device)
-
         x = F.relu(self.fc1(state))
         x = F.relu(self.fc2(x))
         action = torch.tanh(self.fc3(x))
@@ -28,9 +25,6 @@ class Critic(nn.Module):
         self.fc3 = nn.Linear(h_dim2, 1)
 
     def forward(self, state, action):
-        state = torch.from_numpy(state).float().unsqueeze(0).to(device)
-        action = torch.from_numpy(action).float().unsqueeze(0).to(device)
-
         x = F.relu(self.fc1(torch.cat([state, action], dim = -1)))
         x = F.relu(self.fc2(x))
         value = self.fc3(x)

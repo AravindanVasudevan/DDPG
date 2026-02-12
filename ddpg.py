@@ -44,19 +44,18 @@ class ReplayBuffer:
     
 class OU_Noise:
 
-    def __init__(self, input_size, mu = 0, theta = 0.1, sigma = 0.1):
+    def __init__(self, input_size, mu = 0, theta = 0.1):
         self.input_size = input_size
-        self.mu = mu * np.ones_like(input_size)
+        self.mu = mu * np.ones(input_size)
         self.theta = theta
-        self.sigma = sigma
         self.reset()
 
     def reset(self):
         self.state = copy.copy(self.mu)
 
-    def sample(self):
+    def sample(self, sigma = 0.2):
         x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(self.input_size)
+        dx = self.theta * (self.mu - x) + sigma * np.random.randn(self.input_size)
         self.state = x + dx
 
         return self.state
@@ -74,6 +73,8 @@ class DDPG:
         self.critic = Critic(state_size, action_size).to(device)
         self.target_critic = Critic(state_size, action_size).to(device)
 
+        self.update_networks_hard()
+
         self.memory = ReplayBuffer(buffer_size, batch_size)
         self.opt_actor = optim.Adam(self.actor.parameters(), lr = lr_a)
         self.opt_critic = optim.Adam(self.critic.parameters(), lr = lr_c)
@@ -84,8 +85,9 @@ class DDPG:
 
     def act(self, state, noise):
         with torch.no_grad():
-            action = self.actor(state)
-            action = action.squeeze().detach().cpu().numpy()
+            state_tensor = torch.from_numpy(state).float().unsqueeze(0).to(device)
+            action = self.actor(state_tensor)
+            action = action.squeeze().cpu().numpy()
             action = np.clip(action + noise, -1, 1)
 
         return action
@@ -93,7 +95,14 @@ class DDPG:
     def add_data(self, state, action, reward, next_state, terminated, truncated):
         self.memory.add(state, action, reward, next_state, terminated, truncated)
     
-    def update_networks(self, tau):
+    def update_networks_hard(self):
+        for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
+            target_param.data.copy_(param.data)
+        for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
+            target_param.data.copy_(param.data)
+        print('networks initialized')
+
+    def update_networks_soft(self, tau):
         for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
                 target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
@@ -104,32 +113,25 @@ class DDPG:
     def learn(self):
         if len(self.memory) > self.batch_size:
             states, actions, rewards, next_states, terminates, truncates = self.memory.sample()
-            states = states.cpu().numpy()
-            next_states = next_states.cpu().numpy()
-            actions = actions.cpu().numpy()
 
             with torch.no_grad():
                 next_actions = self.target_actor(next_states)
-                next_actions = next_actions.squeeze().detach().cpu().numpy()
                 next_values = self.target_critic(next_states, next_actions)
 
             target_q_values = rewards + self.gamma * (1 - torch.logical_or(terminates, truncates).float()) * next_values
             current_q_values = self.critic(states, actions)
-            
-            # critic_loss = (current_q_values - target_q_values).pow(2).mean()
-            critic_loss = F.mse_loss(current_q_values, target_q_values)
-            # critic_loss = F.smooth_l1_loss(current_q_values, target_q_values)
-            actor_loss = -1 * self.critic(states, self.actor(states).squeeze().detach().cpu().numpy()).squeeze().mean()
-            
-            self.opt_actor.zero_grad()
-            actor_loss.backward()
-            self.opt_actor.step()
 
             self.opt_critic.zero_grad()
+            critic_loss = F.mse_loss(current_q_values, target_q_values)
             critic_loss.backward()
             self.opt_critic.step()
 
-            self.update_networks(tau = self.tau)
+            self.opt_actor.zero_grad()
+            actor_loss = -self.critic(states, self.actor(states)).mean()
+            actor_loss.backward()
+            self.opt_actor.step()
+
+            self.update_networks_soft(tau = self.tau)
         
     def render(self, eps, eval_env):
         frames = []
